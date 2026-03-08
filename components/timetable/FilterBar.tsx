@@ -78,13 +78,13 @@ export default function FilterBar({
         </button>
       </div>
 
-      {/* 2행: 내 아이 학년 + 선택만 보기 */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* 2행: 내 아이 학년 + 선택만 보기 (한 줄) */}
+      <div className="flex items-center gap-1.5">
         <span className="text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">내 아이</span>
-        <div className="flex gap-1 flex-wrap" role="group" aria-label="학년 선택">
+        <div className="flex gap-1 flex-1" role="group" aria-label="학년 선택">
           <button
             onClick={() => onGradeChange(null)}
-            className={`text-sm px-2.5 py-1.5 rounded-md border transition-colors ${
+            className={`text-sm px-2 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
               selectedGrade === null
                 ? "bg-blue-500 text-white border-blue-500"
                 : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
@@ -97,7 +97,7 @@ export default function FilterBar({
             <button
               key={g}
               onClick={() => onGradeChange(selectedGrade === g ? null : g)}
-              className={`text-sm px-2.5 py-1.5 rounded-md border transition-colors ${
+              className={`text-sm px-2 py-1.5 rounded-md border transition-colors flex-1 ${
                 selectedGrade === g
                   ? "bg-blue-500 text-white border-blue-500"
                   : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
@@ -105,14 +105,14 @@ export default function FilterBar({
               aria-pressed={selectedGrade === g}
               aria-label={`${g}학년`}
             >
-              {g}학년
+              {g}
             </button>
           ))}
         </div>
 
         <button
           onClick={onToggleShowSelected}
-          className={`ml-auto text-sm px-3 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
+          className={`text-sm px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
             showOnlySelected
               ? "bg-blue-500 text-white border-blue-500"
               : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
