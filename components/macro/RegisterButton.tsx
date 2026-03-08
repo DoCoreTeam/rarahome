@@ -208,18 +208,22 @@ export default function RegisterButton() {
                 </svg>
               </button>
             </div>
+            <a
+              href="/rara-extension.zip"
+              download
+              className="flex items-center justify-center gap-2 w-full py-2.5 mb-4 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Extension 다운로드 (.zip)
+            </a>
             <ol className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
               <li className="flex gap-2">
                 <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
                   1
                 </span>
-                <span>
-                  이 프로젝트의{" "}
-                  <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                    extension/
-                  </code>{" "}
-                  폴더를 확인하세요
-                </span>
+                <span>위 버튼으로 ZIP 다운로드 후 압축 해제</span>
               </li>
               <li className="flex gap-2">
                 <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
@@ -249,12 +253,7 @@ export default function RegisterButton() {
                 <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
                   5
                 </span>
-                <span>
-                  <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-                    extension/
-                  </code>{" "}
-                  폴더 선택
-                </span>
+                <span>압축 해제된 폴더 선택</span>
               </li>
             </ol>
             <button
