@@ -9,6 +9,7 @@ interface TimetableGridProps {
   courses: Course[];
   selectedIds: Set<string>;
   conflictIds: Set<string>;
+  disabledIds: Set<string>;
   activeDay: Weekday | null;
   onToggle: (courseId: string) => void;
 }
@@ -17,6 +18,7 @@ export default function TimetableGrid({
   courses,
   selectedIds,
   conflictIds,
+  disabledIds,
   activeDay,
   onToggle,
 }: TimetableGridProps) {
@@ -88,6 +90,7 @@ export default function TimetableGrid({
                       timeSlot={slot}
                       selectedIds={selectedIds}
                       conflictIds={conflictIds}
+                      disabledIds={disabledIds}
                       onToggle={onToggle}
                     />
                   ))}

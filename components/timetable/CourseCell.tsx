@@ -9,6 +9,7 @@ interface CourseCellProps {
   timeSlot: string;
   selectedIds: Set<string>;
   conflictIds: Set<string>;
+  disabledIds: Set<string>;
   onToggle: (courseId: string) => void;
 }
 
@@ -18,6 +19,7 @@ export default function CourseCell({
   timeSlot,
   selectedIds,
   conflictIds,
+  disabledIds,
   onToggle,
 }: CourseCellProps) {
   if (courses.length === 0) {
@@ -35,6 +37,7 @@ export default function CourseCell({
             course={course}
             isSelected={selectedIds.has(course.id)}
             isConflict={conflictIds.has(course.id)}
+            isDisabled={disabledIds.has(course.id)}
             onToggle={onToggle}
           />
         ))}

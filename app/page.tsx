@@ -8,7 +8,7 @@ import TimetableGrid from "@/components/timetable/TimetableGrid";
 import FilterBar from "@/components/timetable/FilterBar";
 import MobileDayTabs from "@/components/timetable/MobileDayTabs";
 import SelectedCourses from "@/components/sidebar/SelectedCourses";
-import { isGradeIncluded } from "@/lib/timetable-utils";
+import { isGradeIncluded, hasTimeConflict } from "@/lib/timetable-utils";
 import type { Course, Weekday } from "@/types";
 
 interface CoursesApiResponse {
@@ -41,6 +41,7 @@ export default function Home() {
     setSelectedArea,
     toggleShowOnlySelected,
     toggleCourse,
+    _selectedCourses,
   } = useTimetableStore();
 
   const [mobileDay, setMobileDay] = useState<Weekday>("MON");
@@ -84,6 +85,19 @@ export default function Home() {
     });
     return counts;
   }, [filteredCourses]);
+
+  // 선택된 과목과 시간이 겹치는 미선택 과목 → 비활성화 대상
+  const disabledIds = useMemo(() => {
+    if (_selectedCourses.length === 0) return new Set<string>();
+    const blocked = new Set<string>();
+    allCourses.forEach((course) => {
+      if (selectedIds.has(course.id)) return;
+      if (_selectedCourses.some((s) => hasTimeConflict(s, course))) {
+        blocked.add(course.id);
+      }
+    });
+    return blocked;
+  }, [allCourses, selectedIds, _selectedCourses]);
 
   const handleToggle = useCallback((courseId: string) => {
     const course = allCourses.find((c) => c.id === courseId);
@@ -183,6 +197,7 @@ export default function Home() {
                     courses={filteredCourses}
                     selectedIds={selectedIds}
                     conflictIds={conflictIds}
+                    disabledIds={disabledIds}
                     activeDay={null}
                     onToggle={handleToggle}
                   />
@@ -193,6 +208,7 @@ export default function Home() {
                     courses={filteredCourses}
                     selectedIds={selectedIds}
                     conflictIds={conflictIds}
+                    disabledIds={disabledIds}
                     activeDay={mobileDay}
                     onToggle={handleToggle}
                   />

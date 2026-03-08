@@ -7,21 +7,23 @@ interface CourseCardProps {
   course: Course;
   isSelected: boolean;
   isConflict: boolean;
+  isDisabled: boolean;
   onToggle: (courseId: string) => void;
 }
 
-export default function CourseCard({ course, isSelected, isConflict, onToggle }: CourseCardProps) {
+export default function CourseCard({ course, isSelected, isConflict, isDisabled, onToggle }: CourseCardProps) {
   // 상태별 스타일 분기 — michael
   const getCardStyle = () => {
     if (!course.available) return "bg-gray-100 border-gray-200 opacity-60 dark:bg-gray-800";
+    if (isDisabled) return "bg-gray-100 border-gray-200 opacity-40 dark:bg-gray-800 dark:border-gray-700";
     if (isConflict) return "bg-red-50 border-red-300 dark:bg-red-950";
     if (isSelected) return "bg-blue-50 border-blue-400 dark:bg-blue-950";
     return "bg-white border-gray-200 hover:border-blue-300 dark:bg-gray-800 dark:border-gray-600";
   };
 
   const handleClick = () => {
-    if (!course.available) {
-      console.log(`[CourseCard] 마감 과목 클릭 무시: ${course.name}`);
+    if (!course.available || isDisabled) {
+      console.log(`[CourseCard] 클릭 무시: ${course.name} (${!course.available ? "마감" : "시간 중복 비활성화"})`);
       return;
     }
     console.log(`[CourseCard] 과목 ${isSelected ? "해제" : "선택"}: ${course.name} (${course.id})`);
@@ -33,13 +35,14 @@ export default function CourseCard({ course, isSelected, isConflict, onToggle }:
       className={`
         relative border rounded-lg p-2 cursor-pointer transition-all duration-200
         ${getCardStyle()}
-        ${course.available ? "active:scale-95" : "cursor-not-allowed"}
+        ${(course.available && !isDisabled) ? "active:scale-95" : "cursor-not-allowed"}
       `}
       onClick={handleClick}
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
-      aria-label={`${course.name} ${isSelected ? "선택됨" : "선택 안됨"}`}
+      aria-label={`${course.name} ${isSelected ? "선택됨" : isDisabled ? "시간 중복으로 선택 불가" : "선택 안됨"}`}
+      aria-disabled={isDisabled || !course.available}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
