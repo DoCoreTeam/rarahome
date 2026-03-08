@@ -42,18 +42,21 @@ export default function TimetableGrid({
     );
   }
 
+  // 모바일(단일 요일)은 min-w 불필요 - 빈 공간 방지
+  const tableMinWidth = activeDay ? "w-full" : "min-w-[600px]";
+
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-      <table className="w-full border-collapse text-sm min-w-[600px]" aria-label="방과후 수업 시간표">
+      <table className={`w-full border-collapse text-sm ${tableMinWidth}`} aria-label="방과후 수업 시간표">
         <thead>
           <tr className="bg-gray-100 dark:bg-gray-800">
-            <th className="border border-gray-200 dark:border-gray-700 px-3 py-3 text-center text-gray-600 dark:text-gray-300 font-semibold w-24 whitespace-nowrap">
+            <th className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-center text-gray-600 dark:text-gray-300 font-semibold w-16 whitespace-nowrap text-xs">
               시간
             </th>
             {visibleDays.map((day) => (
               <th
                 key={day}
-                className="border border-gray-200 dark:border-gray-700 px-3 py-3 text-center text-gray-600 dark:text-gray-300 font-semibold min-w-[110px]"
+                className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-center text-gray-600 dark:text-gray-300 font-semibold min-w-[110px] text-sm"
               >
                 {WEEKDAY_LABELS[day]}요일
               </th>
@@ -72,7 +75,7 @@ export default function TimetableGrid({
               const dayMap = timetableMap.get(slot);
               return (
                 <tr key={slot} className="hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
-                  <td className="border border-gray-200 dark:border-gray-700 px-3 py-2 text-center text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 whitespace-nowrap">
+                  <td className="border border-gray-200 dark:border-gray-700 px-1 py-2 text-center text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 whitespace-nowrap w-16">
                     {slot.split("-")[0]}
                     <br />
                     <span className="text-gray-400">~{slot.split("-")[1]}</span>

@@ -98,17 +98,17 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 헤더 */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="max-w-screen-xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-            서이초등학교 방과후 시간표 뷰어
+        <div className="max-w-screen-xl mx-auto px-3 py-3 sm:px-4 sm:py-4">
+          <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white">
+            서이초 방과후 시간표 뷰어
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            과목을 클릭해서 담고, 중복되는 시간대를 확인하세요
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            과목을 탭해서 담고, 중복 시간대를 확인하세요
           </p>
         </div>
       </header>
 
-      <div className="max-w-screen-xl mx-auto px-4 py-4 space-y-4">
+      <div className="max-w-screen-xl mx-auto px-2 py-2 sm:px-4 sm:py-4 space-y-2 sm:space-y-4">
         {/* 에러 표시 */}
         {error && (
           <div className="p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">

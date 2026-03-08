@@ -27,7 +27,7 @@ export default function CourseCell({
   }
 
   return (
-    <td className="border border-gray-200 dark:border-gray-700 p-1 align-top min-w-[100px]">
+    <td className="border border-gray-200 dark:border-gray-700 p-1 align-top w-full">
       <div className="flex flex-col gap-1">
         {courses.map((course) => (
           <CourseCard
