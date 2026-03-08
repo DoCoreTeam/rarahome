@@ -4,9 +4,8 @@ interface FilterBarProps {
   areas: string[];
   selectedArea: string;
   onAreaChange: (area: string) => void;
-  grades: string[];
-  selectedGrade: string;
-  onGradeChange: (grade: string) => void;
+  selectedGrade: number | null;
+  onGradeChange: (grade: number | null) => void;
   showOnlySelected: boolean;
   onToggleShowSelected: () => void;
   onRefresh: () => void;
@@ -16,11 +15,12 @@ interface FilterBarProps {
   filteredCount?: number;
 }
 
+const CHILD_GRADES = [1, 2, 3, 4, 5, 6];
+
 export default function FilterBar({
   areas,
   selectedArea,
   onAreaChange,
-  grades,
   selectedGrade,
   onGradeChange,
   showOnlySelected,
@@ -54,25 +54,39 @@ export default function FilterBar({
         </select>
       </div>
 
-      {/* 대상학년 필터 — michael */}
+      {/* 내 아이 학년 필터 */}
       <div className="flex items-center gap-2">
         <label className="text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
-          대상학년:
+          내 아이:
         </label>
-        <select
-          value={selectedGrade}
-          onChange={(e) => {
-            console.log(`[FilterBar] 학년 변경: ${e.target.value}`);
-            onGradeChange(e.target.value);
-          }}
-          className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="대상학년 선택"
-        >
-          <option value="">전체</option>
-          {grades.map((grade) => (
-            <option key={grade} value={grade}>{grade}</option>
+        <div className="flex gap-1" role="group" aria-label="학년 선택">
+          <button
+            onClick={() => onGradeChange(null)}
+            className={`text-sm px-2.5 py-1 rounded-md border transition-colors ${
+              selectedGrade === null
+                ? "bg-blue-500 text-white border-blue-500"
+                : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
+            }`}
+            aria-pressed={selectedGrade === null}
+          >
+            전체
+          </button>
+          {CHILD_GRADES.map((g) => (
+            <button
+              key={g}
+              onClick={() => onGradeChange(selectedGrade === g ? null : g)}
+              className={`text-sm px-2.5 py-1 rounded-md border transition-colors ${
+                selectedGrade === g
+                  ? "bg-blue-500 text-white border-blue-500"
+                  : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
+              }`}
+              aria-pressed={selectedGrade === g}
+              aria-label={`${g}학년`}
+            >
+              {g}학년
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {/* 선택된 과목만 보기 토글 */}

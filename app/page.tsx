@@ -8,6 +8,7 @@ import TimetableGrid from "@/components/timetable/TimetableGrid";
 import FilterBar from "@/components/timetable/FilterBar";
 import MobileDayTabs from "@/components/timetable/MobileDayTabs";
 import SelectedCourses from "@/components/sidebar/SelectedCourses";
+import { isGradeIncluded } from "@/lib/timetable-utils";
 import type { Course, Weekday } from "@/types";
 
 interface CoursesApiResponse {
@@ -43,7 +44,7 @@ export default function Home() {
   } = useTimetableStore();
 
   const [mobileDay, setMobileDay] = useState<Weekday>("MON");
-  const [selectedGrade, setSelectedGrade] = useState<string>("");
+  const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery<CoursesApiResponse>({
     queryKey: ["courses"],
@@ -58,18 +59,14 @@ export default function Home() {
     return Array.from(set).sort();
   }, [allCourses]);
 
-  const grades = useMemo(() => {
-    const set = new Set(allCourses.map((c) => c.grade).filter(Boolean));
-    return Array.from(set).sort();
-  }, [allCourses]);
-
   const filteredCourses = useMemo(() => {
     let courses = allCourses;
     if (selectedArea) {
       courses = courses.filter((c) => c.area === selectedArea);
     }
-    if (selectedGrade) {
-      courses = courses.filter((c) => c.grade === selectedGrade);
+    if (selectedGrade !== null) {
+      // 대상학년 범위에 내 아이 학년이 포함되는 과목만 표시
+      courses = courses.filter((c) => isGradeIncluded(c.grade, selectedGrade));
     }
     if (showOnlySelected) {
       courses = courses.filter((c) => selectedIds.has(c.id));
@@ -135,10 +132,9 @@ export default function Home() {
           areas={areas}
           selectedArea={selectedArea}
           onAreaChange={setSelectedArea}
-          grades={grades}
           selectedGrade={selectedGrade}
           onGradeChange={(g) => {
-            console.log(`[Page] 학년 필터: ${g || "전체"}`);
+            console.log(`[Page] 학년 필터: ${g !== null ? `${g}학년` : "전체"}`);
             setSelectedGrade(g);
           }}
           showOnlySelected={showOnlySelected}

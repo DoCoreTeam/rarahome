@@ -97,3 +97,15 @@ export function formatPrice(price: number): string {
 export function formatDays(days: Weekday[]): string {
   return days.map((d) => WEEKDAY_LABELS[d]).join("/");
 }
+
+/**
+ * 대상학년 문자열에서 숫자 범위를 추출하여 특정 학년 포함 여부 확인
+ * "1-2학년" → 1~2학년, "3-6학년남자" → 3~6학년, "5-6학년" → 5~6학년
+ */
+export function isGradeIncluded(gradeStr: string, childGrade: number): boolean {
+  const nums = gradeStr.match(/\d+/g)?.map(Number) ?? [];
+  if (nums.length === 0) return false;
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  return childGrade >= min && childGrade <= max;
+}
