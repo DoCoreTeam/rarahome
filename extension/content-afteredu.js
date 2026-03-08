@@ -181,27 +181,37 @@ async function handleAreaSelect(state) {
   setHeader(`영역 이동 중: ${area}`);
   setFooter(`${currentAreaIndex + 1} / ${areaOrder.length} 영역`);
 
-  // 페이지의 <a> 태그에서 area 텍스트 포함한 링크 탐색
-  let targetHref = null;
-  for (const a of document.querySelectorAll("a")) {
-    const t = (a.textContent || "").trim();
-    if (t.includes(area) && a.href && !a.href.endsWith("#")) {
-      targetHref = a.href;
-      console.log(`[rara] 영역 링크 발견: "${t}" → ${targetHref}`);
+  // 영역 텍스트 포함된 요소 탐색 — <a>, [onclick], li, div 순으로 시도
+  // href 조건 없음: javascript:void(0) 이나 # 이어도 click() 으로 동작 — michael
+  let targetEl = null;
+  for (const el of document.querySelectorAll("a, [onclick], li, td, div")) {
+    const t = (el.textContent || "").trim();
+    if (t.includes(area) && t.length < 40) {
+      targetEl = el;
+      console.log(`[rara] 영역 요소 발견: "${t}" (${el.tagName}) href="${el.href || el.getAttribute("onclick") || "없음"}"`);
       break;
     }
   }
 
-  if (!targetHref) {
-    setHeader(`영역 링크 없음: ${area}`, "#f87171");
-    console.error("[rara] 영역 링크 없음:", area);
+  if (!targetEl) {
+    setHeader(`영역 요소 없음: ${area}`, "#f87171");
+    console.error("[rara] 영역 요소 없음:", area);
     clearState();
     return;
   }
 
   // 이동 전 상태 저장 → 과목 목록 페이지에서 재개
   saveState({ phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex, results, dryRun });
-  window.location.href = targetHref;
+
+  // href가 실제 URL이면 직접 이동, 아니면 click()
+  const href = targetEl.href;
+  if (href && !href.includes("javascript") && !href.endsWith("#") && !href.endsWith("/")) {
+    console.log(`[rara] href 직접 이동: ${href}`);
+    window.location.href = href;
+  } else {
+    console.log(`[rara] click() 호출`);
+    targetEl.click();
+  }
   // 컨텍스트 파괴 예정
 }
 
