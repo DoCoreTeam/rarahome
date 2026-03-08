@@ -203,16 +203,29 @@ async function handleAreaSelect(state) {
   // 이동 전 상태 저장 → 과목 목록 페이지에서 재개
   saveState({ phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex, results, dryRun });
 
-  // href가 실제 URL이면 직접 이동, 아니면 click()
-  const href = targetEl.href;
-  if (href && !href.includes("javascript") && !href.endsWith("#") && !href.endsWith("/")) {
-    console.log(`[rara] href 직접 이동: ${href}`);
-    window.location.href = href;
-  } else {
-    console.log(`[rara] click() 호출`);
+  // main world에서 클릭 실행 (isolated world click은 onclick 핸들러 미트리거) — michael
+  const result = await runInMainWorld(`
+    var els = document.querySelectorAll("a, [onclick], li, td, div");
+    for (var i = 0; i < els.length; i++) {
+      var t = (els[i].textContent || "").trim();
+      if (t.indexOf("${area}") !== -1 && t.length < 40) {
+        console.log("[rara-main] 영역 클릭:", t, els[i].tagName);
+        els[i].click();
+        return t;
+      }
+    }
+    return null;
+  `, 3000).catch((e) => {
+    console.warn("[rara] runInMainWorld 실패:", e.message);
+    return null;
+  });
+
+  if (!result) {
+    // fallback: content script에서 직접 click
+    console.log("[rara] fallback click()");
     targetEl.click();
   }
-  // 컨텍스트 파괴 예정
+  // 클릭 후 페이지 이동 → 컨텍스트 파괴 예정
 }
 
 // --- 과목 목록 페이지: 버튼 찾아서 신청 ---
