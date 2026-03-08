@@ -304,32 +304,44 @@ async function detectSuccess(originalUrl) {
 // ============================================================
 async function navigateToArea(areaName) {
   console.log(`[content-afteredu] 영역 이동 시작: ${areaName}`);
-  const currentUrl = window.location.href;
 
-  // 1순위: DOM에서 영역명 텍스트 포함된 클릭 가능한 요소 탐색 — michael
-  // "기타영역 (34)" 같은 행에서 "기타" 텍스트 매칭
-  const candidates = document.querySelectorAll("a, [onclick], li, tr, div, td");
-  let areaEl = null;
-  for (const el of candidates) {
-    const text = (el.textContent || "").trim();
-    if (text.includes(areaName) && text.length < 30) {
-      areaEl = el;
-      break;
+  // 1순위: <a> 태그에서 영역명 텍스트 탐색 → href로 직접 이동 (가장 안전) — michael
+  const links = document.querySelectorAll("a");
+  for (const a of links) {
+    const text = (a.textContent || "").trim();
+    if (text.includes(areaName)) {
+      const href = a.href;
+      console.log(
+        `[content-afteredu] <a> 발견: "${text}" → ${href}`
+      );
+      if (href && href !== "#" && !href.startsWith("javascript")) {
+        window.location.href = href;
+        // 페이지 이동 후 컨텍스트 파괴됨 — 이후 코드 실행 안 됨 (상태는 이미 저장됨)
+        await delay(5000);
+        return;
+      }
+      // href 없으면 클릭
+      a.click();
+      await delay(5000);
+      return;
     }
   }
 
-  if (areaEl) {
-    console.log(
-      `[content-afteredu] 영역 요소 클릭: "${areaEl.textContent.trim()}" (${areaEl.tagName})`
-    );
-    areaEl.click();
-    await waitForUrlChange(currentUrl, 5000);
-    await delay(800);
-    console.log(`[content-afteredu] 영역 이동 완료: ${areaName} -> ${window.location.href}`);
-    return;
+  // 2순위: onclick 속성 가진 요소에서 텍스트 매칭 → click() 호출
+  const onclickEls = document.querySelectorAll("[onclick]");
+  for (const el of onclickEls) {
+    const text = (el.textContent || "").trim();
+    if (text.includes(areaName)) {
+      console.log(
+        `[content-afteredu] onclick 요소 클릭: "${text}" (${el.tagName})`
+      );
+      el.click();
+      await delay(5000);
+      return;
+    }
   }
 
-  // 2순위: class_list() 직접 호출 (fallback) — michael
+  // 3순위: class_list() 직접 호출 (fallback) — michael
   console.log(`[content-afteredu] DOM 요소 없음, class_list() 시도: ${areaName}`);
   await runInMainWorld(`
     if (typeof window.class_list === 'function') {
@@ -339,10 +351,8 @@ async function navigateToArea(areaName) {
       throw new Error('window.class_list 함수 없음');
     }
   `);
-
-  await waitForUrlChange(currentUrl, 5000);
-  await delay(800);
-  console.log(`[content-afteredu] 영역 이동 완료: ${areaName} -> ${window.location.href}`);
+  await delay(5000);
+  console.log(`[content-afteredu] 영역 이동 시도 완료: ${areaName}`);
 }
 
 // ============================================================
@@ -594,23 +604,22 @@ async function runRegistration(courses, resumeState = null, dryRun = false) {
       // 리로드 후 init()이 이 상태를 읽어 runRegistration을 재개함 — michael
       saveState({ courses, areaOrder, currentAreaIndex: areaIndex, results, dryRun });
 
-      try {
-        await navigateToArea(area);
-        // 여기까지 실행됐다면 소프트 네비게이션 (리로드 없음) → 저장된 상태 제거
-        clearState();
-      } catch (err) {
-        console.error(
-          `[content-afteredu] 영역 이동 실패 (${area}):`,
-          err.message
-        );
-        clearState();
-        areaCourses.forEach((course) => {
-          const idx = courses.findIndex((c) => c.siteId === course.siteId);
-          updateOverlayStatus(idx, "error", "영역 이동 실패");
-          results.push({ ...course, status: "error", error: "영역 이동 실패" });
-        });
-        continue;
-      }
+      // navigateToArea는 항상 페이지 이동을 시도함
+      // 이동 성공 시: 컨텍스트 파괴 → init()이 저장된 상태로 재개
+      // 이동 실패 시: 5초 대기 후 여기까지 도달 → 오류 처리
+      await navigateToArea(area).catch((err) => {
+        console.error(`[content-afteredu] 영역 이동 오류 (${area}):`, err.message);
+      });
+
+      // 5초 대기 후에도 여기까지 실행됐다면 페이지 이동이 실패한 것
+      console.warn(`[content-afteredu] 영역 이동 실패 - ${area}: 다음 영역으로 건너뜀`);
+      clearState();
+      areaCourses.forEach((course) => {
+        const idx = courses.findIndex((c) => c.siteId === course.siteId);
+        updateOverlayStatus(idx, "error", "영역 이동 실패");
+        results.push({ ...course, status: "error", error: "영역 이동 실패" });
+      });
+      continue;
     } else {
       console.log(
         `[content-afteredu] 재개 모드 - 현재 페이지가 이미 ${area} 영역`
