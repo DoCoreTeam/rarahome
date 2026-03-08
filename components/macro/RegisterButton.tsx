@@ -16,6 +16,14 @@ export default function RegisterButton() {
   const [extensionInstalled, setExtensionInstalled] = useState(false);
   const [buttonState, setButtonState] = useState<ButtonState>("not-installed");
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyExtensionsUrl = useCallback(() => {
+    navigator.clipboard.writeText("chrome://extensions").then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, []);
 
   const { _selectedCourses } = useTimetableStore();
   const selectedCount = _selectedCourses.length;
@@ -229,12 +237,20 @@ export default function RegisterButton() {
                 <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
                   2
                 </span>
-                <span>
-                  Chrome{" "}
-                  <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  Chrome 주소창에
+                  <button
+                    onClick={copyExtensionsUrl}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-900 rounded text-xs font-mono transition-colors cursor-pointer"
+                    title="클릭하여 복사"
+                  >
                     chrome://extensions
-                  </code>{" "}
-                  접속
+                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  {copied && <span className="text-green-600 dark:text-green-400 text-xs font-medium">복사됨!</span>}
+                  입력 후 접속
                 </span>
               </li>
               <li className="flex gap-2">
