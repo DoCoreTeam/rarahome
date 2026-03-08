@@ -150,7 +150,7 @@ export default function Home() {
         />
 
         {/* 메인 레이아웃: 시간표 + 사이드바 */}
-        <div className="flex flex-col lg:flex-row gap-4 items-start">
+        <div className="flex flex-col lg:flex-row gap-4 lg:items-start">
           {/* 시간표 영역 */}
           <div className="flex-1 min-w-0">
             {/* 모바일: 요일 탭 */}
