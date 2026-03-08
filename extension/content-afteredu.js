@@ -299,6 +299,31 @@ async function navigateToArea(areaName) {
   console.log(`[content-afteredu] 영역 이동 시작: ${areaName}`);
   const currentUrl = window.location.href;
 
+  // 1순위: DOM에서 영역명 텍스트 포함된 클릭 가능한 요소 탐색 — michael
+  // "기타영역 (34)" 같은 행에서 "기타" 텍스트 매칭
+  const candidates = document.querySelectorAll("a, [onclick], li, tr, div, td");
+  let areaEl = null;
+  for (const el of candidates) {
+    const text = (el.textContent || "").trim();
+    if (text.includes(areaName) && text.length < 30) {
+      areaEl = el;
+      break;
+    }
+  }
+
+  if (areaEl) {
+    console.log(
+      `[content-afteredu] 영역 요소 클릭: "${areaEl.textContent.trim()}" (${areaEl.tagName})`
+    );
+    areaEl.click();
+    await waitForUrlChange(currentUrl, 5000);
+    await delay(800);
+    console.log(`[content-afteredu] 영역 이동 완료: ${areaName} -> ${window.location.href}`);
+    return;
+  }
+
+  // 2순위: class_list() 직접 호출 (fallback) — michael
+  console.log(`[content-afteredu] DOM 요소 없음, class_list() 시도: ${areaName}`);
   await runInMainWorld(`
     if (typeof window.class_list === 'function') {
       window.class_list('${areaName}');
@@ -308,13 +333,9 @@ async function navigateToArea(areaName) {
     }
   `);
 
-  // 페이지 이동 대기
   await waitForUrlChange(currentUrl, 5000);
-  // DOM 안정화 대기 — michael
-  await delay(500);
-  console.log(
-    `[content-afteredu] 영역 이동 완료: ${areaName} -> ${window.location.href}`
-  );
+  await delay(800);
+  console.log(`[content-afteredu] 영역 이동 완료: ${areaName} -> ${window.location.href}`);
 }
 
 // ============================================================
@@ -449,7 +470,11 @@ async function passInfoPageIfNeeded() {
     return false;
   }
 
-  if (!href.includes("/register/info.asp")) return true;
+  // subscribe0.asp (영역 선택 페이지) 또는 이미 다른 페이지면 통과
+  if (!href.includes("/register/info.asp")) {
+    console.log(`[content-afteredu] info.asp 아님 (${href}) - 통과`);
+    return true;
+  }
 
   console.log("[content-afteredu] info.asp 안내 페이지 감지 - 자동 통과 시도");
 
