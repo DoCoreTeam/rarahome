@@ -429,6 +429,42 @@ async function processAreaCourses(areaCourses, allCourses, results) {
 // 메인 자동화 로직
 // resumeState: null이면 신선 시작, 있으면 페이지 재로드 후 재개 — michael
 // ============================================================
+// ============================================================
+// info.asp 안내 페이지 자동 통과
+// 수강신청 확인 버튼 클릭 → 실제 강좌 목록 페이지로 이동 — michael
+// ============================================================
+async function passInfoPageIfNeeded() {
+  if (!window.location.href.includes("/register/info.asp")) return;
+
+  console.log("[content-afteredu] info.asp 안내 페이지 감지 - 자동 통과 시도");
+
+  // "수강신청 확인" 버튼 탐색 (input[type=button] 또는 button 텍스트 매칭)
+  const buttons = document.querySelectorAll("input[type='button'], button, a");
+  let confirmBtn = null;
+  for (const btn of buttons) {
+    const text = (btn.value || btn.textContent || "").trim();
+    if (text.includes("수강신청 확인") || text.includes("강좌 확인")) {
+      confirmBtn = btn;
+      break;
+    }
+  }
+
+  if (!confirmBtn) {
+    console.warn("[content-afteredu] 수강신청 확인 버튼 없음 - 수동 클릭 필요");
+    updateOverlayStatus(0, "error", "확인 버튼 없음");
+    return;
+  }
+
+  const currentUrl = window.location.href;
+  console.log("[content-afteredu] 수강신청 확인 버튼 클릭");
+  confirmBtn.click();
+
+  // 페이지 이동 대기 (최대 5초)
+  await waitForUrlChange(currentUrl, 5000);
+  await delay(800);
+  console.log("[content-afteredu] info.asp 통과 완료 ->", window.location.href);
+}
+
 async function runRegistration(courses, resumeState = null) {
   console.log(
     `[content-afteredu] 자동화 ${resumeState ? "재개" : "시작"} - ${courses.length}개 과목`
@@ -436,6 +472,11 @@ async function runRegistration(courses, resumeState = null) {
 
   // 오버레이 생성
   createOverlay(courses);
+
+  // info.asp 안내 페이지면 자동으로 통과 (재개 모드에선 이미 통과했으므로 스킵)
+  if (!resumeState) {
+    await passInfoPageIfNeeded();
+  }
 
   // window.confirm/alert 사전 오버라이드 (main world)
   // 신청 시 확인 대화상자 자동 승인 — michael
