@@ -41,22 +41,29 @@ function groupByArea(courses) {
   return g;
 }
 
-// main world 스크립트 주입 (CSP 차단 시 3초 타임아웃) — michael
-function runInMainWorld(code, ms = 3000) {
-  return new Promise((resolve, reject) => {
-    const id = `rara_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timer = setTimeout(() => {
-      script.remove();
-      reject(new Error("timeout"));
-    }, ms);
-    const script = document.createElement("script");
-    script.textContent = `(function(){try{const r=(function(){${code}})();window.dispatchEvent(new CustomEvent("${id}",{detail:{ok:true,r:r}}))}catch(e){window.dispatchEvent(new CustomEvent("${id}",{detail:{ok:false,e:e.message}}))}})();`;
-    window.addEventListener(id, (e) => {
-      clearTimeout(timer);
-      script.remove();
-      e.detail.ok ? resolve(e.detail.r) : reject(new Error(e.detail.e));
-    }, { once: true });
-    document.head.appendChild(script);
+// background를 통해 MAIN world 실행 (CSP 우회) — michael
+function execMainClickArea(area) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "EXEC_MAIN_CLICK_AREA", area }, (res) => {
+      if (chrome.runtime.lastError) { resolve({ ok: false }); return; }
+      resolve(res || { ok: false });
+    });
+  });
+}
+function execMainOverrideConfirm() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "EXEC_MAIN_OVERRIDE_CONFIRM" }, (res) => {
+      if (chrome.runtime.lastError) { resolve({ ok: false }); return; }
+      resolve(res || { ok: false });
+    });
+  });
+}
+function execMainSend(siteId) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "EXEC_MAIN_SEND", siteId }, (res) => {
+      if (chrome.runtime.lastError) { resolve({ ok: false, result: "error" }); return; }
+      resolve(res || { ok: false, result: "error" });
+    });
   });
 }
 
@@ -144,7 +151,7 @@ function fetchCoursesFromBackground() {
 // ============================================================
 
 // --- info.asp: "수강신청 확인" 클릭 후 subscribe0.asp로 이동 ---
-async function handleInfoPage(courses, areaOrder, dryRun) {
+async function handleInfoPage(courses, areaOrder, dryRun, entryUrl) {
   console.log("[rara] info.asp 처리");
 
   if (document.body.innerText.includes("페이지 접근불가")) {
@@ -166,7 +173,7 @@ async function handleInfoPage(courses, areaOrder, dryRun) {
   }
 
   // 클릭 전 상태 저장 → 이동 후 subscribe0.asp에서 재개
-  saveState({ phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun });
+  saveState({ phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun, entryUrl });
   console.log("[rara] 수강신청 확인 클릭");
   btn.click();
   // 컨텍스트 파괴 예정
@@ -174,7 +181,7 @@ async function handleInfoPage(courses, areaOrder, dryRun) {
 
 // --- subscribe0.asp: 해당 영역 <a> 링크 찾아서 직접 이동 ---
 async function handleAreaSelect(state) {
-  const { courses, areaOrder, currentAreaIndex, results, dryRun } = state;
+  const { courses, areaOrder, currentAreaIndex, results, dryRun, entryUrl } = state;
   const area = areaOrder[currentAreaIndex];
 
   console.log(`[rara] 영역 선택 페이지 — ${area} (${currentAreaIndex + 1}/${areaOrder.length})`);
@@ -201,36 +208,32 @@ async function handleAreaSelect(state) {
   }
 
   // 이동 전 상태 저장 → 과목 목록 페이지에서 재개
-  saveState({ phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex, results, dryRun });
+  saveState({ phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex, results, dryRun, entryUrl });
 
-  // main world에서 클릭 실행 (isolated world click은 onclick 핸들러 미트리거) — michael
-  const result = await runInMainWorld(`
-    var els = document.querySelectorAll("a, [onclick], li, td, div");
-    for (var i = 0; i < els.length; i++) {
-      var t = (els[i].textContent || "").trim();
-      if (t.indexOf("${area}") !== -1 && t.length < 40) {
-        console.log("[rara-main] 영역 클릭:", t, els[i].tagName);
-        els[i].click();
-        return t;
-      }
-    }
-    return null;
-  `, 3000).catch((e) => {
-    console.warn("[rara] runInMainWorld 실패:", e.message);
-    return null;
-  });
-
-  if (!result) {
-    // fallback: content script에서 직접 click
-    console.log("[rara] fallback click()");
+  // background → MAIN world에서 클릭 (CSP 우회) — michael
+  console.log(`[rara] MAIN world 클릭 시도: ${area}`);
+  const res = await execMainClickArea(area);
+  if (!res.ok || !res.result) {
+    console.warn("[rara] MAIN world 클릭 실패 — fallback click()");
     targetEl.click();
+  } else {
+    console.log(`[rara] MAIN world 클릭/호출 성공: "${res.result}"`);
   }
-  // 클릭 후 페이지 이동 → 컨텍스트 파괴 예정
+
+  // 페이지 이동(full reload) or AJAX 업데이트 대기 — michael
+  await delay(2000);
+
+  // URL이 subscribe0.asp 그대로이면 AJAX 방식 → 인라인으로 과목 목록 처리
+  if (window.location.href.includes("subscribe0.asp")) {
+    console.log("[rara] AJAX 방식 감지 — 인라인으로 과목 목록 처리");
+    await handleCourseList({ ...state, phase: "COURSE_LIST" });
+  }
+  // URL 변경됐으면 새 페이지에서 sessionStorage로 자동 재개
 }
 
 // --- 과목 목록 페이지: 버튼 찾아서 신청 ---
 async function handleCourseList(state) {
-  const { courses, areaOrder, currentAreaIndex, results, dryRun } = state;
+  const { courses, areaOrder, currentAreaIndex, results, dryRun, entryUrl } = state;
   const area = areaOrder[currentAreaIndex];
   const grouped = groupByArea(courses);
   const areaCourses = grouped[area] || [];
@@ -238,8 +241,8 @@ async function handleCourseList(state) {
   console.log(`[rara] 과목 목록 처리 — ${area}, ${areaCourses.length}개`);
   setHeader(`신청 중: ${area}`);
 
-  // confirm/alert 오버라이드 (CSP 차단 시 무시)
-  runInMainWorld(`window.confirm=()=>true;window.alert=()=>{};return 'ok';`).catch(() => {});
+  // confirm/alert 오버라이드 (MAIN world via background) — michael
+  await execMainOverrideConfirm();
 
   for (const course of areaCourses) {
     setStatus(courses, course.siteId, "running", "탐색 중...");
@@ -278,18 +281,10 @@ async function handleCourseList(state) {
       continue;
     }
 
-    // 실제 신청: window.send() 직접 호출 시도 → 실패 시 element.click()
+    // 실제 신청: MAIN world에서 send() 호출 → 실패 시 element.click()
     console.log(`[rara] 신청 시도: ${course.name} (siteId:${course.siteId})`);
-    const called = await runInMainWorld(`
-      if (typeof window.send === 'function') {
-        window.confirm = () => true;
-        window.send('${course.siteId}', '');
-        return 'called';
-      }
-      return 'no_send';
-    `).catch(() => "error");
-
-    if (called === "no_send") {
+    const sendRes = await execMainSend(course.siteId);
+    if (!sendRes.ok || sendRes.result === "no_send" || sendRes.result === "error") {
       btn.click();
     }
 
@@ -312,9 +307,8 @@ async function handleCourseList(state) {
   const nextIndex = currentAreaIndex + 1;
   if (nextIndex < areaOrder.length) {
     console.log(`[rara] 다음 영역으로: ${areaOrder[nextIndex]}`);
-    saveState({ phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: nextIndex, results, dryRun });
-    // 상단 "수강신청" 탭 클릭하거나 직접 subscribe0.asp 이동
-    await goToAreaSelect();
+    saveState({ phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: nextIndex, results, dryRun, entryUrl });
+    await goToAreaSelect(entryUrl);
   } else {
     clearState();
     const successCount = results.filter((r) => r.status === "success").length;
@@ -325,20 +319,24 @@ async function handleCourseList(state) {
 }
 
 // --- 신청 후 다음 영역 선택 페이지로 복귀 ---
-async function goToAreaSelect() {
-  // 상단 nav의 "수강신청" 링크 탐색
-  for (const a of document.querySelectorAll("a")) {
-    const t = (a.textContent || "").trim();
-    if (t === "수강신청" && a.href && !a.href.endsWith("#")) {
-      console.log("[rara] 수강신청 nav 클릭:", a.href);
-      window.location.href = a.href;
-      return;
-    }
+async function goToAreaSelect(entryUrl) {
+  // MAIN world에서 nav "수강신청" 클릭 시도 (CSP 우회)
+  const res = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "EXEC_MAIN_CLICK_NAV" }, (r) => {
+      if (chrome.runtime.lastError) { resolve({ ok: false }); return; }
+      resolve(r || { ok: false });
+    });
+  });
+
+  if (res.ok && res.result) {
+    console.log("[rara] 수강신청 nav 클릭 성공:", res.result);
+    return;
   }
-  // fallback: subscribe0.asp 직접 이동
-  const base = window.location.origin;
-  console.log("[rara] fallback: subscribe0.asp 직접 이동");
-  window.location.href = base + "/register/subscribe0.asp";
+
+  // fallback: 원래 학교 entry URL로 이동 (session 유지)
+  const dest = entryUrl || "http://AfterEdu.kr/R1176782B0DDF4";
+  console.log("[rara] fallback: entryUrl로 이동", dest);
+  window.location.href = dest;
 }
 
 // --- 성공 여부 판단 ---
@@ -362,7 +360,19 @@ async function init() {
   if (document.body?.innerText.includes("페이지 접근불가")) {
     console.warn("[rara] 페이지 접근불가");
     createOverlay([]);
-    setHeader("접근불가 — 로그인 후 다시 시도", "#f87171");
+    setHeader("접근불가 — 로그인 필요", "#f87171");
+    setFooter("afteredu.kr 에 먼저 로그인 후 다시 실행하세요");
+    // 로그인 링크 버튼 추가
+    const footer = document.getElementById("rara-footer");
+    if (footer) {
+      footer.innerHTML = `
+        <div style="margin-top:8px;font-size:12px;color:#94a3b8;">afteredu에 로그인 후 매크로를 다시 실행하세요</div>
+        <a href="https://www.afteredu.kr/member/login.asp" target="_blank"
+           style="display:block;margin-top:8px;padding:6px 12px;background:#3b82f6;color:white;border-radius:6px;text-align:center;text-decoration:none;font-size:12px;">
+          afteredu 로그인 페이지 열기
+        </a>
+      `;
+    }
     return;
   }
 
@@ -390,21 +400,19 @@ async function init() {
     return;
   }
 
-  const { courses, dryRun } = res;
+  const { courses, dryRun, entryUrl } = res;
   const areaOrder = Object.keys(groupByArea(courses));
-  console.log("[rara] courses 수신:", courses.length, "개 / 영역:", areaOrder);
+  console.log("[rara] courses 수신:", courses.length, "개 / 영역:", areaOrder, "/ entryUrl:", entryUrl);
 
   createOverlay(courses);
 
-  if (href.includes("/register/info.asp")) {
-    await handleInfoPage(courses, areaOrder, !!dryRun);
+  if (href.includes("/register/info.asp") || href.includes("/register/info_screen.asp")) {
+    await handleInfoPage(courses, areaOrder, !!dryRun, entryUrl);
   } else if (href.includes("/register/subscribe0.asp")) {
-    // info.asp 없이 바로 subscribe0.asp에 도달한 경우
-    const state = { phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun: !!dryRun };
+    const state = { phase: "SELECT_AREA", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun: !!dryRun, entryUrl };
     await handleAreaSelect(state);
   } else {
-    // 다른 페이지에서 시작된 경우 (예: 이미 특정 영역 페이지)
-    const state = { phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun: !!dryRun };
+    const state = { phase: "COURSE_LIST", courses, areaOrder, currentAreaIndex: 0, results: [], dryRun: !!dryRun, entryUrl };
     await handleCourseList(state);
   }
 }

@@ -24,6 +24,106 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleAfterEduReady(sender.tab.id, sendResponse);
     return true;
   }
+
+  // CSP 우회: MAIN world에서 수강신청 nav 클릭 — michael
+  if (message.type === "EXEC_MAIN_CLICK_NAV") {
+    const tabId = sender.tab.id;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        for (var i = 0, els = document.querySelectorAll("a"); i < els.length; i++) {
+          var t = (els[i].textContent || "").trim();
+          if (t === "수강신청" || t === "강좌수강신청") {
+            console.log("[rara-main] 수강신청 nav 클릭:", els[i].href || "(onclick)");
+            els[i].click();
+            return t;
+          }
+        }
+        return null;
+      },
+    }).then((results) => {
+      sendResponse({ ok: true, result: results?.[0]?.result ?? null });
+    }).catch((e) => {
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true;
+  }
+
+  // CSP 우회: MAIN world에서 영역 클릭 — michael
+  if (message.type === "EXEC_MAIN_CLICK_AREA") {
+    const tabId = sender.tab.id;
+    const area = message.area;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (area) => {
+        // 1순위: class_list() 직접 호출 — michael
+        if (typeof class_list === "function") {
+          console.log("[rara-main] class_list 직접 호출:", area);
+          class_list(area);
+          return "direct:" + area;
+        }
+        // 2순위: a[onclick] → a → [onclick] → li 탐색 후 클릭
+        var selectors = ["a[onclick]", "a", "[onclick]", "li"];
+        for (var s = 0; s < selectors.length; s++) {
+          var els = document.querySelectorAll(selectors[s]);
+          for (var i = 0; i < els.length; i++) {
+            var t = (els[i].textContent || "").trim();
+            if (t.indexOf(area) !== -1 && t.length < 40) {
+              console.log("[rara-main] 영역 클릭:", t, els[i].tagName, selectors[s]);
+              els[i].click();
+              return "click:" + t;
+            }
+          }
+        }
+        return null;
+      },
+      args: [area],
+    }).then((results) => {
+      sendResponse({ ok: true, result: results?.[0]?.result ?? null });
+    }).catch((e) => {
+      console.error("[background] EXEC_MAIN_CLICK_AREA 실패:", e);
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true;
+  }
+
+  // CSP 우회: MAIN world에서 confirm 오버라이드 — michael
+  if (message.type === "EXEC_MAIN_OVERRIDE_CONFIRM") {
+    const tabId = sender.tab.id;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => { window.confirm = () => true; window.alert = () => {}; },
+    }).then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+
+  // CSP 우회: MAIN world에서 send() 호출 — michael
+  if (message.type === "EXEC_MAIN_SEND") {
+    const tabId = sender.tab.id;
+    const siteId = message.siteId;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (siteId) => {
+        if (typeof window.send === "function") {
+          window.confirm = () => true;
+          window.send(siteId, "");
+          return "called";
+        }
+        return "no_send";
+      },
+      args: [siteId],
+    }).then((results) => {
+      sendResponse({ ok: true, result: results?.[0]?.result ?? "error" });
+    }).catch((e) => {
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true;
+  }
 });
 
 async function handleStartRegistration(courses, sendResponse, dryRun = false) {
@@ -51,6 +151,7 @@ async function handleStartRegistration(courses, sendResponse, dryRun = false) {
       tabId: tab.id,
       status: "tab_created",
       dryRun: !!dryRun,
+      entryUrl: "http://AfterEdu.kr/R1176782B0DDF4",
     };
 
     console.log(`[background] afteredu 탭 생성 완료 - tabId: ${tab.id}`);
@@ -82,7 +183,11 @@ function handleAfterEduReady(tabId, sendResponse) {
   console.log(
     `[background] courses 전달 - ${registrationSession.courses.length}개 (dryRun: ${registrationSession.dryRun})`
   );
-  sendResponse({ courses: registrationSession.courses, dryRun: registrationSession.dryRun });
+  sendResponse({
+    courses: registrationSession.courses,
+    dryRun: registrationSession.dryRun,
+    entryUrl: registrationSession.entryUrl,
+  });
 }
 
 // 탭 닫히면 세션 정리
