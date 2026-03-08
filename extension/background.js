@@ -15,7 +15,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   );
 
   if (message.type === "START_REGISTRATION") {
-    handleStartRegistration(message.courses, sendResponse);
+    handleStartRegistration(message.courses, sendResponse, message.dryRun);
     return true; // 비동기 응답
   }
 
@@ -26,9 +26,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleStartRegistration(courses, sendResponse) {
+async function handleStartRegistration(courses, sendResponse, dryRun = false) {
   console.log(
-    `[background] 수강신청 시작 - ${courses.length}개:`,
+    `[background] 수강신청 ${dryRun ? "드라이런" : "시작"} - ${courses.length}개:`,
     courses.map((c) => c.name)
   );
 
@@ -47,9 +47,10 @@ async function handleStartRegistration(courses, sendResponse) {
     });
 
     registrationSession = {
-      courses: courses,
+      courses,
       tabId: tab.id,
       status: "tab_created",
+      dryRun: !!dryRun,
     };
 
     console.log(`[background] afteredu 탭 생성 완료 - tabId: ${tab.id}`);
@@ -79,9 +80,9 @@ function handleAfterEduReady(tabId, sendResponse) {
 
   registrationSession.status = "running";
   console.log(
-    `[background] courses 전달 - ${registrationSession.courses.length}개`
+    `[background] courses 전달 - ${registrationSession.courses.length}개 (dryRun: ${registrationSession.dryRun})`
   );
-  sendResponse({ courses: registrationSession.courses });
+  sendResponse({ courses: registrationSession.courses, dryRun: registrationSession.dryRun });
 }
 
 // 탭 닫히면 세션 정리

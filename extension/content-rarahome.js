@@ -12,9 +12,9 @@ window.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "RARA_START_REGISTRATION") return;
   if (event.data.source !== "rarahome") return;
 
-  const courses = event.data.courses;
+  const { courses, dryRun } = event.data;
   console.log(
-    `[content-rarahome] 수강신청 시작 메시지 수신 - ${courses.length}개 과목:`,
+    `[content-rarahome] 수강신청 ${dryRun ? "드라이런" : "시작"} 메시지 수신 - ${courses.length}개 과목:`,
     courses.map((c) => c.name)
   );
 
@@ -22,7 +22,8 @@ window.addEventListener("message", (event) => {
   chrome.runtime.sendMessage(
     {
       type: "START_REGISTRATION",
-      courses: courses,
+      courses,
+      dryRun: !!dryRun,
     },
     (response) => {
       if (chrome.runtime.lastError) {

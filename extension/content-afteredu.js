@@ -377,13 +377,13 @@ function loadState() {
 // ============================================================
 // 영역 내 과목 처리 (공통 로직 — 신선 시작/재개 양쪽 사용)
 // ============================================================
-async function processAreaCourses(areaCourses, allCourses, results) {
+async function processAreaCourses(areaCourses, allCourses, results, dryRun = false) {
   for (const course of areaCourses) {
     const idx = allCourses.findIndex((c) => c.siteId === course.siteId);
-    updateOverlayStatus(idx, "running");
+    updateOverlayStatus(idx, "running", dryRun ? "탐색 중..." : "처리 중...");
 
     console.log(
-      `[content-afteredu] 과목 처리: ${course.name} (siteId: ${course.siteId})`
+      `[content-afteredu] ${dryRun ? "[드라이런] " : ""}과목 처리: ${course.name} (siteId: ${course.siteId})`
     );
 
     const button = findCourseButton(course.siteId);
@@ -391,7 +391,7 @@ async function processAreaCourses(areaCourses, allCourses, results) {
     if (!button) {
       updateOverlayStatus(idx, "notfound", "버튼 없음");
       results.push({ ...course, status: "notfound" });
-      console.log(`[content-afteredu] ${course.name} - 버튼 없음 스킵`);
+      console.log(`[content-afteredu] ${course.name} - 버튼 없음`);
       continue;
     }
 
@@ -401,7 +401,16 @@ async function processAreaCourses(areaCourses, allCourses, results) {
     if (buttonText.includes("취소") || buttonText.includes("신청완료")) {
       updateOverlayStatus(idx, "already", "이미 신청됨");
       results.push({ ...course, status: "already" });
-      console.log(`[content-afteredu] ${course.name} - 이미 신청됨 스킵`);
+      console.log(`[content-afteredu] ${course.name} - 이미 신청됨`);
+      continue;
+    }
+
+    // 드라이런: 버튼 발견만 확인하고 실제 클릭 안 함 — michael
+    if (dryRun) {
+      updateOverlayStatus(idx, "success", `버튼 발견 (${buttonText || "신청"})`);
+      results.push({ ...course, status: "success", dryRun: true });
+      console.log(`[content-afteredu] [드라이런] ${course.name} - 버튼 발견: "${buttonText}"`);
+      await delay(300);
       continue;
     }
 
@@ -409,11 +418,7 @@ async function processAreaCourses(areaCourses, allCourses, results) {
     const clickResult = await clickWithFallback(button, course.siteId);
 
     if (clickResult.success) {
-      updateOverlayStatus(
-        idx,
-        "success",
-        `신청 완료 (방법 ${clickResult.method})`
-      );
+      updateOverlayStatus(idx, "success", `신청 완료 (방법 ${clickResult.method})`);
       results.push({ ...course, status: "success", method: clickResult.method });
     } else {
       updateOverlayStatus(idx, "error", "신청 실패");
@@ -465,9 +470,12 @@ async function passInfoPageIfNeeded() {
   console.log("[content-afteredu] info.asp 통과 완료 ->", window.location.href);
 }
 
-async function runRegistration(courses, resumeState = null) {
+async function runRegistration(courses, resumeState = null, dryRun = false) {
+  // resumeState에서 dryRun 복원 (sessionStorage 재개 시)
+  if (resumeState && resumeState.dryRun !== undefined) dryRun = resumeState.dryRun;
+
   console.log(
-    `[content-afteredu] 자동화 ${resumeState ? "재개" : "시작"} - ${courses.length}개 과목`
+    `[content-afteredu] 자동화 ${resumeState ? "재개" : "시작"} - ${courses.length}개 과목${dryRun ? " [드라이런 모드]" : ""}`
   );
 
   // 오버레이 생성
@@ -532,7 +540,7 @@ async function runRegistration(courses, resumeState = null) {
     if (!skipNavigation) {
       // 네비게이션 전 상태 저장 — class_list() 호출 시 전체 리로드 발생 가능
       // 리로드 후 init()이 이 상태를 읽어 runRegistration을 재개함 — michael
-      saveState({ courses, areaOrder, currentAreaIndex: areaIndex, results });
+      saveState({ courses, areaOrder, currentAreaIndex: areaIndex, results, dryRun });
 
       try {
         await navigateToArea(area);
@@ -557,7 +565,7 @@ async function runRegistration(courses, resumeState = null) {
       );
     }
 
-    await processAreaCourses(areaCourses, courses, results);
+    await processAreaCourses(areaCourses, courses, results, dryRun);
   }
 
   // 완료
@@ -603,9 +611,9 @@ async function init() {
     }
 
     console.log(
-      `[content-afteredu] courses 수신 완료 - ${response.courses.length}개`
+      `[content-afteredu] courses 수신 완료 - ${response.courses.length}개 (dryRun: ${response.dryRun})`
     );
-    runRegistration(response.courses);
+    runRegistration(response.courses, null, !!response.dryRun);
   });
 }
 

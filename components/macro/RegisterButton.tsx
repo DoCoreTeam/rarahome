@@ -62,6 +62,27 @@ export default function RegisterButton() {
     }
   }, [extensionInstalled, selectedCount, buttonState]);
 
+  const buildCourses = useCallback((): MacroCourse[] | null => {
+    try {
+      const raw = localStorage.getItem("timetable-storage");
+      if (!raw) {
+        console.error("[RegisterButton] timetable-storage 없음");
+        return null;
+      }
+      const parsed = JSON.parse(raw) as {
+        state: { _selectedCourses: Array<{ id: string; name: string; area: string }> };
+      };
+      return parsed.state._selectedCourses.map((c) => ({
+        siteId: c.id.replace("s-", ""),
+        name: c.name,
+        area: c.area,
+      }));
+    } catch (err) {
+      console.error("[RegisterButton] localStorage 파싱 실패:", err);
+      return null;
+    }
+  }, []);
+
   const handleClick = useCallback(() => {
     if (buttonState === "not-installed") {
       setShowInstallGuide(true);
@@ -69,50 +90,29 @@ export default function RegisterButton() {
     }
     if (buttonState !== "ready") return;
 
+    const courses = buildCourses();
+    if (!courses) { setButtonState("ready"); return; }
+
     setButtonState("running");
+    console.log(`[RegisterButton] 수강신청 시작 - ${courses.length}개: [${courses.map(c => c.name).join(", ")}]`);
+    window.postMessage({ type: "RARA_START_REGISTRATION", source: "rarahome", courses }, "*");
 
-    // localStorage에서 직접 파싱하여 선택된 과목 추출 — michael
-    try {
-      const raw = localStorage.getItem("timetable-storage");
-      if (!raw) {
-        console.error("[RegisterButton] timetable-storage 없음");
-        setButtonState("ready");
-        return;
-      }
-
-      const parsed = JSON.parse(raw) as {
-        state: { _selectedCourses: Array<{ id: string; name: string; area: string }> };
-      };
-      const courses: MacroCourse[] = parsed.state._selectedCourses.map((c) => ({
-        siteId: c.id.replace("s-", ""),
-        name: c.name,
-        area: c.area,
-      }));
-
-      const names = courses.map((c) => c.name);
-      console.log(
-        `[RegisterButton] 수강신청 시작 - ${courses.length}개 과목: [${names.join(", ")}]`
-      );
-
-      window.postMessage(
-        {
-          type: "RARA_START_REGISTRATION",
-          source: "rarahome",
-          courses,
-        },
-        "*"
-      );
-    } catch (err) {
-      console.error("[RegisterButton] localStorage 파싱 실패:", err);
-      setButtonState("ready");
-      return;
-    }
-
-    // 5초 후 running 상태 자동 해제 (Extension이 별도 응답을 보내지 않을 경우 대비) — michael
+    // 5초 후 running 상태 자동 해제 — michael
     setTimeout(() => {
       setButtonState((prev) => (prev === "running" ? "ready" : prev));
     }, 5000);
-  }, [buttonState]);
+  }, [buttonState, buildCourses]);
+
+  const handleDryRun = useCallback(() => {
+    if (buttonState !== "ready") return;
+    const courses = buildCourses();
+    if (!courses) return;
+
+    console.log(`[RegisterButton] 드라이런 시작 - ${courses.length}개: [${courses.map(c => c.name).join(", ")}]`);
+    window.postMessage({ type: "RARA_START_REGISTRATION", source: "rarahome", courses, dryRun: true }, "*");
+
+    // 드라이런은 running 상태로 전환하지 않음 (버튼 유지)
+  }, [buttonState, buildCourses]);
 
   const baseClasses =
     "w-full rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2";
@@ -144,12 +144,20 @@ export default function RegisterButton() {
 
       case "ready":
         return (
-          <button
-            onClick={handleClick}
-            className={`${baseClasses} bg-blue-500 hover:bg-blue-600 text-white shadow-sm hover:shadow focus:ring-blue-500`}
-          >
-            {"\uD83D\uDE80"} 수강신청 실행 ({selectedCount}개)
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleClick}
+              className={`${baseClasses} bg-blue-500 hover:bg-blue-600 text-white shadow-sm hover:shadow focus:ring-blue-500`}
+            >
+              {"\uD83D\uDE80"} 수강신청 실행 ({selectedCount}개)
+            </button>
+            <button
+              onClick={handleDryRun}
+              className={`${baseClasses} bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700 text-xs py-2`}
+            >
+              {"\uD83E\uDDEA"} 드라이런 (버튼 탐색만, 실제 신청 안 함)
+            </button>
+          </div>
         );
 
       case "running":
