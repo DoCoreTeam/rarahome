@@ -2,255 +2,258 @@
 
 ## 핵심 목표
 
-> **rarahome.vercel.app에서 시간표를 짠 다음, 버튼 하나로 w2.afteredu.kr에 수강신청 자동 완료**
+> **rarahome.vercel.app에서 "수강신청 실행" 버튼 클릭 → afteredu 탭이 열리며 자동 신청 완료**
 
-사용자가 터미널을 열거나 파일을 내보낼 필요 없이, 브라우저 안에서 모든 것이 끝나야 한다.
-
----
-
-## 방식 비교 및 최종 선택
-
-| 방식 | 뷰어→매크로 연동 | 설치 난이도 | 세션 공유 | 추천도 |
-|------|------|------|------|------|
-| **A. Chrome 확장 (Extension)** | 버튼 1클릭 | 개발자 모드 설치 | 자동 (같은 브라우저) | ★★★★★ |
-| B. Playwright + CLI | JSON 내보내기 → 터미널 | Node.js 환경 필요 | Chrome 프로필 재사용 | ★★★☆☆ |
-| C. 로컬 API 서버 | fetch 호출 가능 | 항상 서버 켜야 함 | 쿠키 전달 복잡 | ★★☆☆☆ |
-| D. Vercel API + Puppeteer | 완전 자동 | 서버리스 제약 큼 | 불가 | ★☆☆☆☆ |
-
-**→ A. Chrome Extension 채택**
-
-이유:
-- rarahome의 `localStorage`를 content script가 직접 읽을 수 있음
-- afteredu 탭에서 이미 로그인된 브라우저 세션을 그대로 사용
-- 사용자 입장: "수강신청 시작" 버튼 클릭 → 자동 완료
-- 터미널, 파일 내보내기, Node.js 불필요
+사용자가 터미널, 파일 내보내기, Extension 팝업을 따로 열 필요 없이
+**뷰어 안의 버튼 하나로 모든 것이 끝나야 한다.**
 
 ---
 
-## 전체 아키텍처
+## 왜 Chrome Extension이어야 하는가
+
+브라우저 보안 정책(Same-Origin Policy)상, 일반 웹앱(rarahome)은
+다른 도메인(afteredu)의 탭을 열어 그 안에서 버튼을 클릭하는 것이 **원천 불가**.
+
+| 방법 | "버튼 클릭 → afteredu 자동화" 가능 여부 |
+|------|-----------------------------------------|
+| 일반 웹앱 fetch | ❌ CORS 차단 |
+| window.open | ❌ 탭만 열림, 조작 불가 |
+| 로컬 서버 (localhost API) | △ 가능하지만 항상 서버 켜야 함 |
+| **Chrome Extension** | ✅ 탭 생성 + 스크립트 주입 + 세션 공유 모두 가능 |
+
+---
+
+## 전체 흐름
 
 ```
-rarahome.vercel.app                    Chrome Extension                    w2.afteredu.kr
-─────────────────────                  ──────────────────                  ──────────────
-시간표 선택 완료
+[rarahome.vercel.app]
+──────────────────────────────────────────────
+  시간표에서 과목 선택 완료
+  사이드바: "수강신청 실행" 버튼 클릭
         │
-        │ content script가
-        │ localStorage 읽음
+        │ window.postMessage({
+        │   type: "RARA_START_REGISTRATION",
+        │   courseIds: ["s-1283046", "s-1283052"]
+        │ })
         ▼
-timetable-storage.state.selectedIds
-= ["s-1283046", "s-1283052", ...]
+
+[content-rarahome.js — rarahome 페이지에 주입됨]
+──────────────────────────────────────────────
+  window 메시지 수신
+  localStorage에서 _selectedCourses 상세 정보 보강
         │
-        │ chrome.runtime.sendMessage
+        │ chrome.runtime.sendMessage({
+        │   type: "START_REGISTRATION",
+        │   courses: [{id, name, area, siteId}, ...]
+        │ })
         ▼
-  [Extension Popup]
-  "수강신청 시작" 버튼
+
+[background.js — Service Worker]
+──────────────────────────────────────────────
+  메시지 수신
+  chrome.tabs.create({
+    url: "https://w2.afteredu.kr/subscribe0.asp"
+  })
         │
-        │ chrome.tabs.create
+        │ 탭 로드 완료 후 courses 목록 전달
         ▼
-                                       background.js
-                                       (service worker)
-                                              │
-                                              │ 새 탭 열기
-                                              ▼
-                                                                    subscribe0.asp
-                                                                           │
-                                                                    content script 주입
-                                                                           │
-                                                                    각 과목 순서대로:
-                                                                    1. class_list(area) 호출
-                                                                    2. 과목 ID로 신청 버튼 찾기
-                                                                    3. 클릭 → 확인 팝업 처리
-                                                                    4. 결과 기록
-                                                                           │
-                                              │ 결과 수신 ◄───────────────┘
-                                              ▼
-                                       [Extension Popup]
-                                       성공/실패 목록 표시
+
+[content-afteredu.js — afteredu 탭에 주입됨]
+──────────────────────────────────────────────
+  로그인 상태 확인 (미로그인 시 중단 + 알림)
+
+  영역별 그룹화:
+    기타영역: [과학실험A(1283046), 로봇제작1A(1283052)]
+    체육영역: [태권도(1283070)]
+
+  각 과목 순서대로:
+    1. class_list(areaName) 호출 → 영역 페이지 이동
+    2. send('siteId','') 버튼 탐색
+    3. 클릭 → confirm 팝업 자동 확인
+    4. 성공/마감/이미신청 판별
+    5. 1~2초 랜덤 딜레이 후 다음 과목
+        │
+        │ chrome.runtime.sendMessage({ type: "RESULT", results: [...] })
+        ▼
+
+[background.js → content-rarahome.js → rarahome 페이지]
+──────────────────────────────────────────────
+  결과를 rarahome UI에 표시:
+    ✅ 과학실험A — 신청 완료
+    ✅ 로봇제작1A — 신청 완료
+    ❌ 브레인체스A — 마감 (잔여 0석)
 ```
 
 ---
 
-## 프로젝트 구조 (신규)
+## 프로젝트 구조
 
 ```
 rarahome/
-├── extension/                        # Chrome Extension 루트
-│   ├── manifest.json                 # Manifest V3 설정
-│   ├── popup.html                    # 확장 팝업 UI
-│   ├── popup.js                      # 팝업 로직 (선택 과목 조회, 신청 시작 버튼)
-│   ├── background.js                 # Service Worker (탭 관리, 메시지 라우팅)
-│   ├── content-rarahome.js           # rarahome 주입 스크립트 (localStorage 읽기)
-│   └── content-afteredu.js          # afteredu 주입 스크립트 (신청 자동화)
-├── scraper/
-│   └── ...                          # 기존 스크래퍼 (변경 없음)
+├── extension/
+│   ├── manifest.json              # Manifest V3
+│   ├── background.js              # Service Worker: 탭 관리, 메시지 라우팅
+│   ├── content-rarahome.js        # rarahome 주입: 버튼 메시지 수신, 결과 표시
+│   └── content-afteredu.js       # afteredu 주입: 실제 신청 자동화
+├── components/
+│   └── sidebar/
+│       └── SelectedCourses.tsx    # "수강신청 실행" 버튼 추가 예정
 └── docs/
     └── macro-plan.md
 ```
 
+Extension 파일은 별도 빌드 없이 순수 JS로 작성.
+`extension/` 폴더를 Chrome에 "압축 해제된 확장 프로그램 로드"로 설치.
+
 ---
 
-## Extension 파일별 역할
+## rarahome UI 변경 계획
 
-### `manifest.json`
+### SelectedCourses 사이드바 하단에 추가
+
+```
+┌─────────────────────────────┐
+│  선택한 과목 (3개)    초기화 │
+├─────────────────────────────┤
+│  과학실험A  수 13:10  ×      │
+│  로봇제작1A 월 13:30  ×      │
+│  태권도B    금 14:00  ×      │
+├─────────────────────────────┤
+│  월 수강료       ₩96,000    │
+│  교재비          ₩131,000   │
+│  합계            ₩227,000   │
+├─────────────────────────────┤
+│  [이미지 저장]               │
+│  [🚀 수강신청 실행]          │  ← 신규
+└─────────────────────────────┘
+```
+
+### "수강신청 실행" 버튼 동작
+
+- Extension 미설치 상태: 버튼 클릭 시 "Extension을 먼저 설치해주세요" 안내 + 설치 방법 링크
+- Extension 설치 상태: `window.postMessage`로 신청 시작 신호 전송
+- Extension 설치 여부 감지: content script가 페이지에 `data-rara-extension="true"` 속성 주입 → 버튼이 이를 확인
+
+---
+
+## manifest.json 핵심 설정
+
 ```json
 {
   "manifest_version": 3,
   "name": "서이초 방과후 수강신청 도우미",
-  "permissions": ["storage", "tabs", "scripting", "activeTab"],
+  "version": "1.0.0",
+  "permissions": ["tabs", "scripting"],
   "host_permissions": [
     "https://rarahome.vercel.app/*",
     "https://w2.afteredu.kr/*"
   ],
-  "action": { "default_popup": "popup.html" },
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://rarahome.vercel.app/*"],
-      "js": ["content-rarahome.js"]
+      "js": ["content-rarahome.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": ["https://w2.afteredu.kr/*"],
+      "js": ["content-afteredu.js"],
+      "run_at": "document_end"
     }
   ]
 }
 ```
 
-### `content-rarahome.js` (rarahome 페이지에 자동 주입)
-- `localStorage.getItem("timetable-storage")` 파싱
-- `state.selectedIds` (배열) + `state._selectedCourses` (과목 상세) 추출
-- Extension popup에서 `chrome.tabs.sendMessage`로 요청하면 응답
-
-### `popup.js` (Extension 팝업)
-- 현재 탭이 rarahome이면 → content script에서 선택 과목 조회
-- 과목 목록 표시 (이름, 요일, 시간)
-- "수강신청 시작" 버튼 → background로 메시지 전송
-
-### `background.js` (Service Worker)
-- popup에서 신청 요청 수신
-- `chrome.tabs.create({ url: "https://w2.afteredu.kr/subscribe0.asp" })`
-- 탭 로드 완료 후 `content-afteredu.js` 실행 + 과목 목록 전달
-- 결과 수집 후 popup에 전달
-
-### `content-afteredu.js` (afteredu 페이지 자동화)
-- background에서 전달받은 과목 ID 목록으로 신청 순서 결정
-- 각 과목별:
-  1. `class_list(areaName)` 호출로 영역 페이지 이동 (기존 스크래퍼 분석 결과 활용)
-  2. 과목 ID 매칭: `send('${siteId}','')` 버튼 탐색
-  3. 버튼 클릭 → confirm 팝업 자동 확인
-  4. 성공/실패/마감 결과 기록
-  5. 다음 과목 전 1~2초 랜덤 딜레이
-
 ---
 
-## 데이터 흐름 (상세)
+## 데이터 구조 (Extension 내부 전달 메시지)
 
-### 1단계: 선택 과목 읽기
-```
-rarahome localStorage:
+```js
+// rarahome → background (신청 시작)
 {
-  "state": {
-    "selectedIds": ["s-1283046", "s-1283052"],
-    "_selectedCourses": [
-      { "id": "s-1283046", "name": "과학실험A", "area": "기타영역", ... },
-      { "id": "s-1283052", "name": "로봇제작1A", "area": "기타영역", ... }
-    ]
-  }
+  type: "START_REGISTRATION",
+  courses: [
+    { siteId: "1283046", name: "과학실험A", area: "기타영역" },
+    { siteId: "1283052", name: "로봇제작1A", area: "기타영역" },
+    { siteId: "1283070", name: "태권도B",   area: "체육영역" }
+  ]
 }
-```
 
-### 2단계: 과목 ID → afteredu 사이트 ID 변환
-```
-"s-1283046" → siteId = "1283046"
-신청 버튼: onclick="send('1283046','')"
-```
-이미 스크래퍼에서 이 ID 추출 방식을 확인 완료.
+// content-afteredu → background (결과)
+{
+  type: "REGISTRATION_RESULT",
+  results: [
+    { siteId: "1283046", name: "과학실험A", status: "success" },
+    { siteId: "1283052", name: "로봇제작1A", status: "success" },
+    { siteId: "1283070", name: "태권도B",   status: "closed" }
+  ]
+}
 
-### 3단계: 영역별 그룹화 후 순서 실행
+// status 값: "success" | "already" | "closed" | "error"
 ```
-기타영역: [과학실험A(1283046), 로봇제작1A(1283052)]
-예술영역: [...]
-
-→ class_list("기타영역") 호출
-→ 기타영역 과목 신청 완료
-→ class_list("예술영역") 호출
-→ ...
-```
-같은 영역을 한 번에 처리해 페이지 이동 최소화.
 
 ---
 
-## 수강신청 사이트 분석 (구현 전 필수 확인)
+## afteredu 사이트 분석 (구현 전 필수 확인)
 
-> 스크래퍼 작성 시 파악한 내용 기반 — 신청 버튼 부분은 추가 분석 필요.
+### 이미 파악된 것 (스크래퍼에서 확인)
+- 영역 이동: `class_list(areaName)` JS 함수 호출
+- 과목 ID: 각 과목 `send('siteId','')` onclick 속성
+- DOM: `ul.application_list li > div.box_raund`
 
-### 이미 파악된 것
-- `class_list(areaName)` → 해당 영역 subscribe1.asp로 이동
-- 과목 카드: `ul.application_list li > div.box_raund`
-- 과목 ID: `send('siteId','')` onclick 속성에서 추출
-- 로그인 필요: 미로그인 시 로그인 페이지로 리다이렉트
+### 추가로 확인해야 할 것
 
-### 추가 확인 필요
-- [ ] `send()` 함수 실제 동작 (form submit? fetch? location.href?)
-- [ ] 신청 후 confirm 팝업 메시지 텍스트 ("신청하시겠습니까?" 등)
-- [ ] 신청 성공 페이지/메시지 판별 방법
-- [ ] 이미 신청된 과목의 버튼 상태 (disabled? 숨김?)
-- [ ] CSRF 토큰 존재 여부 (form hidden input 확인)
-
----
-
-## UI/UX 흐름 (사용자 관점)
-
-```
-1. rarahome.vercel.app 접속
-2. 시간표에서 원하는 과목 선택 (기존 기능)
-3. 수강신청 오픈 시간 대기
-4. 오픈되면 Chrome Extension 아이콘 클릭
-5. 팝업에서 선택된 과목 목록 확인
-6. "수강신청 시작" 버튼 클릭
-7. afteredu 탭이 자동으로 열리며 신청 진행
-8. 팝업에 결과 표시:
-   ✅ 과학실험A — 신청 완료
-   ✅ 로봇제작1A — 신청 완료
-   ❌ 브레인체스A — 마감 (잔여 0석)
-```
+- [ ] `send()` 함수 정체 — form submit인가, fetch인가, location 변경인가
+      → 브라우저 개발자도구 Network 탭에서 실제 신청 버튼 클릭 시 확인
+- [ ] 신청 완료 판별 — 성공 메시지 텍스트 or URL 변경 패턴
+- [ ] 이미 신청된 과목 — 버튼 숨김? disabled? 다른 텍스트?
+- [ ] 마감 과목 — 버튼 없음? 텍스트 변경?
+- [ ] confirm 팝업 — `window.confirm()` 오버라이드로 자동 확인 가능 여부
+- [ ] CSRF 토큰 — hidden input 존재 여부
 
 ---
 
 ## 에러 처리
 
-| 상황 | 처리 |
-|------|------|
-| rarahome 선택 과목 없음 | 팝업에서 안내 메시지 표시 |
-| afteredu 미로그인 | 로그인 페이지 감지 → 팝업에 "먼저 로그인하세요" 표시 |
-| 마감 과목 | 스킵 + 결과에 ❌ 표시 |
-| 이미 신청됨 | 스킵 + 결과에 ⚠️ 표시 |
-| 신청 중 네트워크 오류 | 1회 재시도 후 실패 기록 |
-| 예상 외 페이지 | 중단 + 현재 URL 리포트 |
+| 상황 | content-afteredu.js 처리 | rarahome 표시 |
+|------|--------------------------|---------------|
+| 미로그인 | 즉시 중단 | "먼저 afteredu에 로그인하세요" |
+| 마감 과목 | 스킵 | ❌ 과목명 — 마감 |
+| 이미 신청됨 | 스킵 | ⚠️ 과목명 — 이미 신청됨 |
+| 신청 버튼 없음 | 스킵 | ❓ 과목명 — 버튼 미발견 |
+| 네트워크 오류 | 1회 재시도 | ❌ 과목명 — 오류 |
 
 ---
 
 ## 구현 순서
 
-### Phase 1: afteredu 신청 흐름 역공학
-- `send()` 함수 분석 (브라우저 개발자도구 → Network 탭)
-- 신청 버튼 클릭 시 실제 요청 확인
-- 성공/실패/마감 판별 로직 파악
+### Phase 1 — afteredu 신청 흐름 역공학 (선행 필수)
+- 실제 수강신청 버튼 클릭 → Network 탭 분석
+- `send()` 함수 구조 파악
+- 성공/실패/마감 판별 로직 확정
 
-### Phase 2: Extension 뼈대
-- `manifest.json` 작성
-- `popup.html/js` — rarahome localStorage 읽어서 과목 목록 표시
+### Phase 2 — Extension 뼈대
+- `manifest.json`
+- `content-rarahome.js`: postMessage 수신 + 결과 표시
+- `background.js`: 탭 생성 + 메시지 라우팅
 
-### Phase 3: 자동화 스크립트
-- `content-afteredu.js` — 단일 과목 신청 함수
-- `background.js` — 탭 관리 + 메시지 라우팅
+### Phase 3 — afteredu 자동화
+- `content-afteredu.js`: 영역 이동 + 신청 버튼 클릭 + 결과 반환
+- 단일 과목 신청 함수 → 전체 목록 순환
 
-### Phase 4: 연결 및 결과 표시
-- 전체 흐름 통합 테스트
-- 팝업 결과 UI
+### Phase 4 — rarahome UI 연동
+- "수강신청 실행" 버튼 (SelectedCourses.tsx)
+- Extension 설치 여부 감지
+- 결과 표시 UI
 
 ---
 
 ## 제약 사항
 
-- Chrome 브라우저 전용 (Edge도 호환, Firefox는 별도 대응 필요)
-- 사용자가 Chrome에 Extension을 수동 설치해야 함 (개발자 모드 또는 Chrome Web Store 등록)
-- afteredu 로그인은 사용자가 직접 해야 함 (자동 로그인 불포함)
-- 수강신청 기간 외에는 신청 버튼 자체가 없음 → 기간 중 테스트 필요
+- Chrome 전용 (Edge 호환, Firefox 미지원)
+- 사용자가 `extension/` 폴더를 Chrome에 수동 설치해야 함
+- afteredu 로그인은 사용자가 직접 (자동 로그인 미포함)
+- 수강신청 기간 외에는 신청 버튼 자체가 없음 → 기간 오픈 시 실사용 테스트 필요
 - afteredu 사이트 구조 변경 시 `content-afteredu.js` 재분석 필요
