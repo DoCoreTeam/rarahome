@@ -78,13 +78,13 @@ export default function FilterBar({
         </button>
       </div>
 
-      {/* 2행: 내 아이 학년 + 선택만 보기 (한 줄) */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">내 아이</span>
-        <div className="flex gap-1 flex-1" role="group" aria-label="학년 선택">
+      {/* 2행: 학년 선택 + 선택만 보기 */}
+      <div className="flex items-center gap-2">
+        {/* 학년 버튼: flex-1로 남은 공간 채움 */}
+        <div className="flex gap-1 flex-1 min-w-0" role="group" aria-label="내 아이 학년 선택">
           <button
             onClick={() => onGradeChange(null)}
-            className={`text-sm px-2 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
+            className={`shrink-0 text-sm px-2 py-1.5 rounded-md border transition-colors ${
               selectedGrade === null
                 ? "bg-blue-500 text-white border-blue-500"
                 : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
@@ -97,7 +97,7 @@ export default function FilterBar({
             <button
               key={g}
               onClick={() => onGradeChange(selectedGrade === g ? null : g)}
-              className={`text-sm px-2 py-1.5 rounded-md border transition-colors flex-1 ${
+              className={`text-sm py-1.5 rounded-md border transition-colors flex-1 min-w-0 ${
                 selectedGrade === g
                   ? "bg-blue-500 text-white border-blue-500"
                   : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"
@@ -110,9 +110,10 @@ export default function FilterBar({
           ))}
         </div>
 
+        {/* 선택만 보기: shrink-0으로 절대 밀리지 않음 */}
         <button
           onClick={onToggleShowSelected}
-          className={`text-sm px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
+          className={`shrink-0 text-sm px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
             showOnlySelected
               ? "bg-blue-500 text-white border-blue-500"
               : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-blue-400"

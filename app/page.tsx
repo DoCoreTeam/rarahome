@@ -108,7 +108,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="max-w-screen-xl mx-auto px-3 py-3 space-y-3">
+      <div className="max-w-screen-xl mx-auto px-1.5 sm:px-4 py-2 space-y-2">
         {/* 에러 표시 */}
         {error && (
           <div className="p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
