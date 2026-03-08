@@ -42,7 +42,7 @@ async function handleStartRegistration(courses, sendResponse, dryRun = false) {
   // afteredu 탭 생성
   try {
     const tab = await chrome.tabs.create({
-      url: "http://AfterEdu.kr/R1176782B0DDF4",
+      url: "https://w3.afteredu.kr/register/info.asp",
       active: true,
     });
 

@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "서이초 방과후 수강신청 도우미",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "rarahome 시간표 뷰어와 연동하여 수강신청을 자동화합니다",
   "permissions": ["tabs", "scripting"],
   "host_permissions": [
     "https://rarahome.vercel.app/*",
+    "http://*.afteredu.kr/*",
+    "https://*.afteredu.kr/*",
     "http://afteredu.kr/*",
-    "https://w3.afteredu.kr/*"
+    "https://afteredu.kr/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -19,7 +21,12 @@
       "run_at": "document_end"
     },
     {
-      "matches": ["https://w3.afteredu.kr/*"],
+      "matches": [
+        "http://*.afteredu.kr/*",
+        "https://*.afteredu.kr/*",
+        "http://afteredu.kr/*",
+        "https://afteredu.kr/*"
+      ],
       "js": ["content-afteredu.js"],
       "run_at": "document_end"
     }
