@@ -8,9 +8,15 @@ console.log("[content-afteredu] 주입 완료 -", window.location.href);
 // 유틸리티: main world에서 JS 실행 (script 태그 주입)
 // content script는 isolated world이므로 window.send() 등 직접 호출 불가 — michael
 // ============================================================
-function runInMainWorld(code) {
+function runInMainWorld(code, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
     const eventName = `rara_result_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    // CSP 차단 시 이벤트가 영원히 안 오므로 타임아웃 필수 — michael
+    const timer = setTimeout(() => {
+      script.remove();
+      reject(new Error("runInMainWorld timeout (CSP 차단 가능성)"));
+    }, timeoutMs);
 
     const script = document.createElement("script");
     script.textContent = `(function() {
@@ -25,6 +31,7 @@ function runInMainWorld(code) {
     window.addEventListener(
       eventName,
       (e) => {
+        clearTimeout(timer);
         script.remove();
         if (e.detail.success) resolve(e.detail.result);
         else reject(new Error(e.detail.error));
@@ -526,38 +533,13 @@ async function runRegistration(courses, resumeState = null, dryRun = false) {
   // 오버레이 생성
   createOverlay(courses);
 
-  // info.asp 안내 페이지면 자동으로 통과 (재개 모드에선 이미 통과했으므로 스킵)
-  if (!resumeState) {
-    const passed = await passInfoPageIfNeeded();
-    if (!passed) {
-      console.error("[content-afteredu] 페이지 통과 실패 - 자동화 중단");
-      return;
-    }
-  }
-
-  // window.confirm/alert 사전 오버라이드 (main world)
-  // 신청 시 확인 대화상자 자동 승인 — michael
-  await runInMainWorld(`
-    window.confirm = function(msg) {
-      console.log('[rara-main] confirm 자동 승인:', msg);
-      return true;
-    };
-    window.alert = function(msg) {
-      console.log('[rara-main] alert 무시:', msg);
-    };
-    return 'overridden';
-  `).catch((e) =>
-    console.warn("[content-afteredu] confirm 오버라이드 실패:", e.message)
-  );
-
-  // 영역별 그룹화: 같은 영역 과목을 묶어 페이지 이동 최소화 — michael
+  // 영역별 그룹화 먼저 수행 — michael
   const grouped = {};
   courses.forEach((course) => {
     if (!grouped[course.area]) grouped[course.area] = [];
     grouped[course.area].push(course);
   });
 
-  // 영역 처리 순서 결정 (재개 시 저장된 순서 복원)
   const areaOrder = resumeState ? resumeState.areaOrder : Object.keys(grouped);
   const startAreaIndex = resumeState ? resumeState.currentAreaIndex : 0;
   const results = resumeState ? resumeState.results : [];
@@ -566,8 +548,29 @@ async function runRegistration(courses, resumeState = null, dryRun = false) {
     `[content-afteredu] 영역 처리 순서: [${areaOrder.join(", ")}], 시작 인덱스: ${startAreaIndex}`
   );
 
+  // info.asp면 상태 저장 후 "수강신청 확인" 클릭 → 페이지 이동 후 init()이 재개
+  // 클릭 후 컨텍스트가 파괴되므로 먼저 상태를 저장해야 함 — michael
+  if (!resumeState && window.location.href.includes("/register/info.asp")) {
+    saveState({ courses, areaOrder, currentAreaIndex: 0, results, dryRun });
+    const passed = await passInfoPageIfNeeded();
+    if (!passed) {
+      clearState();
+      console.error("[content-afteredu] 페이지 통과 실패 - 자동화 중단");
+      return;
+    }
+    // 여기까지 도달하면 소프트 네비게이션 → 상태 유지 (init이 subscribe0.asp에서 재개)
+    return;
+  }
+
+  // window.confirm/alert 오버라이드 — CSP 차단 시 3초 후 타임아웃, 진행에는 영향 없음
+  runInMainWorld(`
+    window.confirm = function(msg) { console.log('[rara-main] confirm 자동 승인:', msg); return true; };
+    window.alert = function(msg) { console.log('[rara-main] alert 무시:', msg); };
+    return 'overridden';
+  `).catch((e) => console.warn("[content-afteredu] confirm 오버라이드 실패 (무시):", e.message));
+
   // 재개 시: 이미 처리된 과목들 오버레이 복원
-  if (resumeState && results.length > 0) {
+  if (results.length > 0) {
     results.forEach((r) => {
       const idx = courses.findIndex((c) => c.siteId === r.siteId);
       if (idx !== -1) updateOverlayStatus(idx, r.status);
