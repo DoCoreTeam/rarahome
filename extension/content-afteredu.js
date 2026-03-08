@@ -438,12 +438,22 @@ async function processAreaCourses(areaCourses, allCourses, results, dryRun = fal
 // info.asp 안내 페이지 자동 통과
 // 수강신청 확인 버튼 클릭 → 실제 강좌 목록 페이지로 이동 — michael
 // ============================================================
+// 반환값: true = 통과 성공 or 해당 없음, false = 접근 오류 페이지
 async function passInfoPageIfNeeded() {
-  if (!window.location.href.includes("/register/info.asp")) return;
+  const href = window.location.href;
+
+  // 접근불가 오류 페이지 감지 — 이 경우 자동화 불가
+  if (document.body && document.body.innerText.includes("페이지 접근불가")) {
+    console.error("[content-afteredu] 페이지 접근불가 - 로그인 필요 또는 잘못된 URL");
+    updateOverlayHeader("로그인이 필요합니다. 직접 afteredu에 로그인 후 다시 시도하세요.");
+    return false;
+  }
+
+  if (!href.includes("/register/info.asp")) return true;
 
   console.log("[content-afteredu] info.asp 안내 페이지 감지 - 자동 통과 시도");
 
-  // "수강신청 확인" 버튼 탐색 (input[type=button] 또는 button 텍스트 매칭)
+  // "수강신청 확인" 버튼 탐색 — michael
   const buttons = document.querySelectorAll("input[type='button'], button, a");
   let confirmBtn = null;
   for (const btn of buttons) {
@@ -455,19 +465,29 @@ async function passInfoPageIfNeeded() {
   }
 
   if (!confirmBtn) {
-    console.warn("[content-afteredu] 수강신청 확인 버튼 없음 - 수동 클릭 필요");
-    updateOverlayStatus(0, "error", "확인 버튼 없음");
-    return;
+    console.warn("[content-afteredu] 수강신청 확인 버튼 없음 - 신청기간 확인 필요");
+    updateOverlayHeader("수강신청 확인 버튼을 찾을 수 없습니다. 직접 클릭해주세요.");
+    return false;
   }
 
   const currentUrl = window.location.href;
-  console.log("[content-afteredu] 수강신청 확인 버튼 클릭");
+  console.log("[content-afteredu] 수강신청 확인 버튼 자동 클릭");
   confirmBtn.click();
 
-  // 페이지 이동 대기 (최대 5초)
   await waitForUrlChange(currentUrl, 5000);
   await delay(800);
   console.log("[content-afteredu] info.asp 통과 완료 ->", window.location.href);
+  return true;
+}
+
+// 오버레이 헤더에 상태 메시지 표시 — michael
+function updateOverlayHeader(message) {
+  if (!overlay) return;
+  const header = overlay.querySelector("div");
+  if (header) {
+    header.style.color = "#f87171";
+    header.textContent = message;
+  }
 }
 
 async function runRegistration(courses, resumeState = null, dryRun = false) {
@@ -483,7 +503,11 @@ async function runRegistration(courses, resumeState = null, dryRun = false) {
 
   // info.asp 안내 페이지면 자동으로 통과 (재개 모드에선 이미 통과했으므로 스킵)
   if (!resumeState) {
-    await passInfoPageIfNeeded();
+    const passed = await passInfoPageIfNeeded();
+    if (!passed) {
+      console.error("[content-afteredu] 페이지 통과 실패 - 자동화 중단");
+      return;
+    }
   }
 
   // window.confirm/alert 사전 오버라이드 (main world)
