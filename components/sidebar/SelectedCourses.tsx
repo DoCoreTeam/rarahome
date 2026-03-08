@@ -1,10 +1,11 @@
 "use client";
 
 // 선택된 과목 사이드바 - 합계 금액, 충돌 경고 표시 — michael
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTimetableStore } from "@/stores/timetable-store";
 import { formatPrice, formatDays } from "@/lib/timetable-utils";
 import type { Course } from "@/types";
+import ExportModal from "@/components/export/ExportModal";
 
 interface SelectedCoursesProps {
   allCourses: Course[];
@@ -13,6 +14,7 @@ interface SelectedCoursesProps {
 export default function SelectedCourses({ allCourses }: SelectedCoursesProps) {
   const { selectedIds, conflictIds, clearSelected, toggleCourse } =
     useTimetableStore();
+  const [showExport, setShowExport] = useState(false);
 
   const selectedCourses = useMemo(
     () => allCourses.filter((c) => selectedIds.has(c.id)),
@@ -29,6 +31,13 @@ export default function SelectedCourses({ allCourses }: SelectedCoursesProps) {
   const hasConflict = conflictIds.size > 0;
 
   return (
+    <>
+    {showExport && (
+      <ExportModal
+        courses={selectedCourses}
+        onClose={() => setShowExport(false)}
+      />
+    )}
     <aside className="w-full lg:w-72 flex-shrink-0">
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm sticky top-4">
         {/* 헤더 */}
@@ -40,16 +49,25 @@ export default function SelectedCourses({ allCourses }: SelectedCoursesProps) {
             </span>
           </h2>
           {selectedCourses.length > 0 && (
-            <button
-              onClick={() => {
-                console.log("[SelectedCourses] 전체 초기화");
-                clearSelected();
-              }}
-              className="text-xs text-red-500 hover:text-red-700 transition-colors"
-              aria-label="선택 전체 초기화"
-            >
-              초기화
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowExport(true)}
+                className="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                aria-label="이미지로 저장"
+              >
+                이미지 저장
+              </button>
+              <button
+                onClick={() => {
+                  console.log("[SelectedCourses] 전체 초기화");
+                  clearSelected();
+                }}
+                className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                aria-label="선택 전체 초기화"
+              >
+                초기화
+              </button>
+            </div>
           )}
         </div>
 
@@ -146,5 +164,6 @@ export default function SelectedCourses({ allCourses }: SelectedCoursesProps) {
         )}
       </div>
     </aside>
+    </>
   );
 }
