@@ -6,7 +6,8 @@
   "permissions": ["tabs", "scripting"],
   "host_permissions": [
     "https://rarahome.vercel.app/*",
-    "https://w2.afteredu.kr/*"
+    "http://afteredu.kr/*",
+    "https://w3.afteredu.kr/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -18,7 +19,7 @@
       "run_at": "document_end"
     },
     {
-      "matches": ["https://w2.afteredu.kr/*"],
+      "matches": ["https://w3.afteredu.kr/*"],
       "js": ["content-afteredu.js"],
       "run_at": "document_end"
     }
